@@ -30,7 +30,7 @@ class RestaurantRatingModel(db.Model):
     rating = db.Column(db.Integer, nullable=False)
     meal = db.Column(db.String, nullable=False)
     # photo = db.Column(nullable=True)
-    calories = db.Column(db.String, nullable=False)
+    calories = db.Column(db.Integer, nullable=False)
     # time/date
     # date_posted = db.Column()
 
@@ -67,6 +67,79 @@ rating_fields = {
 }
 
 # API Resources
+class RestaurantRatings(Resource):
+    @marshal_with(rating_fields)
+    def post(self):
+        '''
+        Add a new restaurant rating.
+        '''
+        args = rating_args.parse_args()
+        new_rating = RestaurantRatingModel(
+            restaurant_name=args['restaurant_name'],
+            restaurant_type=args['restaurant_type'],
+            restaurant_address=args['restaurant_address'],
+            rating=args['rating'],
+            meal=args['meal'],
+            # photo=args.get('photo'),  # Uncomment if handling photos
+            calories=args['calories'],
+            # meal_datetime=args.get('meal_datetime', datetime.utcnow()),  # Uncomment if needed
+            user_id=args.get('user_id')
+        )
+        db.session.add(new_rating)
+        db.session.commit()
+        return new_rating, 200
+
+class RestaurantRating(Resource):
+    @marshal_with(rating_fields)
+    def get(self, id):
+        '''
+        Retrieve restaurant rating ID,
+        '''
+        rating = RestaurantRatingModel.query.filter_by(id=id).first()
+        if not rating:
+            abort(404, message='Restaurant rating not found.')
+        return rating, 200
+    
+    @marshal_with(rating_fields)
+    def patch(self, id):
+        '''
+        Update fields of a restaurant rating.
+        '''
+        args = rating_args.parse_args()
+        rating = RestaurantRatingModel.query.filter_by(id=id).first()
+        if not rating:
+            abort(404, message='Restaurant rating not found.')
+
+        # update fields
+        rating.restaurant_name = args.get('restaurant_name', rating.restaurant_name)
+        rating.restaurant_type = args.get('restaurant_type', rating.restaurant_type)
+        rating.restaurant_address = args.get('restaurant_address', rating.restaurant_address)
+        rating.rating = args.get('rating', rating.rating)
+        rating.meal = args.get('meal', rating.meal)
+        # rating.photo = args.get('photo', rating.photo)  # Uncomment if handling photos
+        rating.calories = args.get('calories', rating.calories)
+        # rating.meal_datetime = args.get('meal_datetime', rating.meal_datetime)  # Uncomment if needed
+        rating.user_id = args.get('user_id', rating.user_id)
+
+        db.session.commit()
+        return rating, 200
+    
+    @marshal_with(rating_fields)
+    def delete(self, id):
+        '''
+        Delete a restaurant rating by ID
+        '''
+        rating = RestaurantRatingModel.query.filter_by(id=id).first()
+        if not rating:
+            abort(404, message='Restaurant rating not found.')
+        db.session.delete(rating)
+        db.session.commit()
+        return {'message': 'Deleted'}, 200
+
+
+# Resources to API
+api.add_resource(RestaurantRatings, '/api/ratings/')
+api.add_resource(RestaurantRating, '/api/ratings/<int:id>')
 
 
 @app.route('/')
