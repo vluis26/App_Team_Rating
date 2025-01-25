@@ -32,7 +32,7 @@ class RestaurantRatingModel(db.Model):
     # photo = db.Column(nullable=True)
     calories = db.Column(db.Integer, nullable=False)
     # time/date
-    # date_posted = db.Column()
+    date_posted = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     # associate with the user
     user_id = db.Column(db.Integer, db.ForeignKey('user_model.id'), nullable=True)
@@ -45,11 +45,12 @@ rating_args = reqparse.RequestParser()
 rating_args.add_argument('restaurant_name', type=str, required=True, help="Restaurant name cannot be blank")
 rating_args.add_argument('restaurant_type', type=str, required=True, help="Restaurant type cannot be blank")
 rating_args.add_argument('restaurant_address', type=str, required=True, help="Restaurant address cannot be blank")
-rating_args.add_argument('rating', type=int, required=True, help="Rating (1-5) is required")
+rating_args.add_argument('rating', type=int, required=True, choices=[1,2,3,4,5], help="Rating (1-5) is required")
 rating_args.add_argument('meal', type=str, required=True, help="Meal cannot be empty")
 # rating_args.add_argument('photo', type=str, required=False)
 rating_args.add_argument('calories', type=int, required=True, help="Calories cannot be empty")
-# rating_args.add_argument('meal_datetime', type=, required=True, help="Time cannot be blank")
+# We want  date_posted to be blank to prevent client manipulation
+# rating_args.add_argument('date_posted', type=, required=True, help="Time cannot be blank")
 rating_args.add_argument('user_id', type=int, required=False)
 
 
@@ -59,11 +60,11 @@ rating_fields = {
     'restaurant_name': fields.String,
     'restaurant_type': fields.String,
     'rating': fields.Integer,
-    # 'meal_datetime': fields.DateTime(),
     'meal': fields.String,
     # 'photo': fields.String
     'calories': fields.Integer,
     'user_id': fields.Integer,
+    'date_posted': fields.DateTime(dt_format='iso8601')
 }
 
 # API Resources
@@ -82,12 +83,44 @@ class RestaurantRatings(Resource):
             meal=args['meal'],
             # photo=args.get('photo'),  # Uncomment if handling photos
             calories=args['calories'],
-            # meal_datetime=args.get('meal_datetime', datetime.utcnow()),  # Uncomment if needed
             user_id=args.get('user_id')
         )
         db.session.add(new_rating)
         db.session.commit()
         return new_rating, 200
+    
+    @marshal_with(rating_fields)
+    def get(self):
+        """
+        Retrieve all restaurant ratings with optional filtering.
+        Supports filters:
+            - restaurant_type
+            - min_rating
+            - max_rating
+            - start_date (YYYY-MM-DD)
+            - end_date (YYYY-MM-DD)
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('restaurant_type', type=str, location='args')
+        parser.add_argument('min_rating', type=int, location='args')
+        parser.add_argument('max_rating', type=int, location='args')
+        args = parser.parse_args()
+
+        query = RestaurantRatingModel.query
+
+        if args['restaurant_type']:
+            query = query.filter(RestaurantRatingModel.restaurant_type.ilike(f"%{args['restaurant_type']}%"))
+        if args['min_rating']:
+            query = query.filter(RestaurantRatingModel.rating >= args['min_rating'])
+        if args['max_rating']:
+            query = query.filter(RestaurantRatingModel.rating <= args['max_rating'])
+        # if args['start_date']:
+        #     query = query.filter(RestaurantRatingModel.date_posted >= args['start_date'])
+        # if args['end_date']:
+        #     query = query.filter(RestaurantRatingModel.date_posted <= args['end_date'])
+
+        ratings = query.all()
+        return ratings, 200
 
 class RestaurantRating(Resource):
     @marshal_with(rating_fields)
@@ -136,15 +169,33 @@ class RestaurantRating(Resource):
         db.session.commit()
         return {'message': 'Deleted'}, 200
 
+class AggregatedData(Resource):
+    def get(self):
+        """
+        Retrieve aggregated data: average ratings.
+        """
+        from sqlalchemy import func
+
+        aggregation = db.session.query(
+            RestaurantRatingModel.restaurant_name,
+            func.avg(RestaurantRatingModel.rating).label('average_rating'),
+        ).group_by(RestaurantRatingModel.restaurant_name).all()
+
+        result = []
+        for agg in aggregation:
+            result.append({
+                'restaurant_name': agg.restaurant_name,
+                'average_rating': round(agg.average_rating, 2) if agg.average_rating else None,
+            })
+        return result, 200
+
+
 
 # Resources to API
 api.add_resource(RestaurantRatings, '/api/ratings/')
 api.add_resource(RestaurantRating, '/api/ratings/<int:id>')
+api.add_resource(AggregatedData, '/api/ratings/aggregated/')
 
-
-@app.route('/')
-def home():
-    return '<h1>Flask REST API</h1>'
 
 if __name__ == '__main__':
     app.run(debug=True) 
