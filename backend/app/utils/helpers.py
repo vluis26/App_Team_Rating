@@ -1,4 +1,5 @@
 import logging
+from app.services.ticketmaster_service import search_events
 import requests
 import os
 
@@ -24,3 +25,21 @@ def extract_city(address):
     except Exception as e:
         logging.error(f"Error extracting city: {e}")
         return None
+
+def fetch_and_assign_events(rating):
+    """
+    Fetch events based on the rating's city and assign them to the rating.
+
+    Args:
+        rating (RestaurantRatingModel): The restaurant rating instance.
+
+    Returns:
+        None
+    """
+    try:
+        events = search_events(city=rating.city, max_events=3, classificationName='Music')
+        rating.events = events
+        logging.debug(f"Fetched Events for rating ID {rating.id}: {events}")
+    except Exception as e:
+        logging.error(f"Error fetching events for rating ID {rating.id}: {e}")
+        rating.events = []

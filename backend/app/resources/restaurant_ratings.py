@@ -1,8 +1,7 @@
 from flask_restful import Resource, reqparse, marshal_with, abort, fields
 from sqlalchemy import func
 from app.models import RestaurantRatingModel
-from app.services.ticketmaster_service import search_events
-from app.utils.helpers import extract_city
+from app.utils.helpers import extract_city, fetch_and_assign_events
 from app.extensions import db
 import logging
 
@@ -73,16 +72,8 @@ class RestaurantRatings(Resource):
         db.session.add(new_rating)
         db.session.commit()
         
-        # Fetch events from Ticketmaster API
-        try:
-            events = search_events(city=city, max_events=3, classificationName='Music')
-            logging.debug(f"Fetched Events: {events}")
-        except Exception as e:
-            logging.error(f"Error fetching events: {e}")
-            events = []  # Handle API call failures gracefully
-        
-        # Assign events to the dynamic property
-        new_rating.events = events
+        # Fetch and assign events using the helper function
+        fetch_and_assign_events(new_rating)
         
         return new_rating, 201
 
@@ -116,15 +107,9 @@ class RestaurantRatings(Resource):
 
         ratings = query.all()
 
-        # Assign events to each rating
+        # Assign events to each rating using the helper function
         for rating in ratings:
-            try:
-                events = search_events(city=rating.city, max_events=3, classificationName='Music')
-                rating.events = events
-                logging.debug(f"Fetched Events for rating ID {rating.id}: {events}")
-            except Exception as e:
-                logging.error(f"Error fetching events for rating ID {rating.id}: {e}")
-                rating.events = []
+            fetch_and_assign_events(rating)
         
         return ratings, 200
 
@@ -150,16 +135,8 @@ class RestaurantRating(Resource):
         if not rating:
             abort(404, message='Restaurant rating not found.')
         
-        # Fetch events from Ticketmaster API
-        try:
-            events = search_events(city=rating.city, max_events=3, classificationName='Music')
-            logging.debug(f"Fetched Events for rating ID {id}: {events}")
-        except Exception as e:
-            logging.error(f"Error fetching events for rating ID {id}: {e}")
-            events = []  # Handle API call failures gracefully
-        
-        # Assign events to the dynamic property
-        rating.events = events
+        # Fetch and assign events using the helper function
+        fetch_and_assign_events(rating)
         
         return rating, 200
     
@@ -193,14 +170,8 @@ class RestaurantRating(Resource):
             new_city = extract_city(rating.restaurant_address)
             if new_city:
                 rating.city = new_city
-                try:
-                    events = search_events(city=new_city, max_events=3, classificationName='Music')
-                    logging.debug(f"Fetched Events on Update for rating ID {id}: {events}")
-                except Exception as e:
-                    logging.error(f"Error fetching events on update for rating ID {id}: {e}")
-                    events = []
-                # Assign events to the dynamic property
-                rating.events = events
+                # Fetch and assign events using the helper function
+                fetch_and_assign_events(rating)
             else:
                 abort(400, message="Could not extract city from new address.")
 

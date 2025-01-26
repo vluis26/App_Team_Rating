@@ -38,7 +38,7 @@ def search_events(city, max_events=3, classificationName=None):
 
     try:
         response = requests.get(endpoint, params=params)
-        response.raise_for_status()  # Raises HTTPError for bad responses
+        response.raise_for_status()
         data = response.json()
         events = data.get('_embedded', {}).get('events', [])
         logging.debug(f"Fetched {len(events)} events for city: {city}")
@@ -73,7 +73,7 @@ def get_event_details(event_id):
         response = requests.get(endpoint, params=params)
         response.raise_for_status()
         event_details = response.json()
-        logging.debug(f"Fetched details for event ID: {event_id}")
+        # logging.debug(f"Fetched details for event ID: {event_id}")
         return event_details
     except requests.exceptions.HTTPError as http_err:
         logging.error(f"HTTP error occurred: {http_err} - Response: {response.text}")
