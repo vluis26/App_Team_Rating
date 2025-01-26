@@ -90,6 +90,7 @@ class RestaurantRatings(Resource):
             list: A list of restaurant ratings with optional filters applied. 
         """
         parser = reqparse.RequestParser()
+        parser.add_argument('restaurant_name', type=str, location='args')
         parser.add_argument('restaurant_type', type=str, location='args')
         parser.add_argument('min_rating', type=int, location='args')
         parser.add_argument('max_rating', type=int, location='args')
@@ -98,6 +99,8 @@ class RestaurantRatings(Resource):
         query = RestaurantRatingModel.query
 
         # Types of filters that can be applied
+        if args['restaurant_name']:
+            query = query.filter(RestaurantRatingModel.restaurant_name.ilike(f"%{args['restaurant_name']}%"))
         if args['restaurant_type']:
             query = query.filter(RestaurantRatingModel.restaurant_type.ilike(f"%{args['restaurant_type']}%"))
         if args['min_rating']:
