@@ -1,60 +1,10 @@
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_restful import Resource, Api, reqparse, fields, marshal_with, abort
-from flask_cors import CORS
-from datetime import datetime, timezone
+from flask_restful import Resource, reqparse, marshal_with, abort, fields
+from sqlalchemy import func
+from app.models import RestaurantRatingModel
+from app.services.ticketmaster_service import search_events
+from app.utils.helpers import extract_city
+from app.extensions import db
 import logging
-
-from ticketmaster_service import search_events
-
-app = Flask(__name__)
-CORS(app)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
-db = SQLAlchemy(app)
-api = Api(app)
-
-# associate ratings with specific users
-class UserModel(db.Model): 
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(80), unique=True, nullable=False)
-
-    ratings = db.relationship('RestaurantRatingModel', backref='user', lazy=True)
-
-    def __repr__(self): 
-        return f"User(name = {self.name}, email = {self.email})"
-
-# Details of each restaurant visit
-class RestaurantRatingModel(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    restaurant_name = db.Column(db.String(100), nullable=False)
-    restaurant_type = db.Column(db.String(120), nullable=False)
-    restaurant_address = db.Column(db.String(150), nullable=False)
-    rating = db.Column(db.Integer, nullable=False)
-    meal = db.Column(db.String, nullable=False)
-    calories = db.Column(db.Integer, nullable=False)
-    date_posted = db.Column(db.DateTime, default=datetime.now(timezone.utc), nullable=False)
-    city = db.Column(db.String(100), nullable=False)
-    
-    # Associate with the user
-    user_id = db.Column(db.Integer, db.ForeignKey('user_model.id'), nullable=True)
-    
-    # Dynamic attribute for events
-    _events = None
-
-    def __repr__(self):
-        return f"RestaurantRating(restaurant_name={self.restaurant_name}, rating={self.rating})"
-    
-    @property
-    def events(self):
-        """Dynamic property to hold events data."""
-        return self._events if self._events else []
-    
-    @events.setter
-    def events(self, value):
-        """Setter for the dynamic events property."""
-        self._events = value
-
 
 # Request Parsers
 rating_args = reqparse.RequestParser()
@@ -63,12 +13,8 @@ rating_args.add_argument('restaurant_type', type=str, required=True, help="Resta
 rating_args.add_argument('restaurant_address', type=str, required=True, help="Restaurant address cannot be blank")
 rating_args.add_argument('rating', type=int, required=True, choices=[1,2,3,4,5], help="Rating (1-5) is required")
 rating_args.add_argument('meal', type=str, required=True, help="Meal cannot be empty")
-# rating_args.add_argument('photo', type=str, required=False)
 rating_args.add_argument('calories', type=int, required=True, help="Calories cannot be empty")
-# We want  date_posted to be blank to prevent client manipulation
-# rating_args.add_argument('date_posted', type=, required=True, help="Time cannot be blank")
 rating_args.add_argument('user_id', type=int, required=False)
-
 
 # Output Fields
 event_fields = {
@@ -87,33 +33,28 @@ rating_fields = {
     'calories': fields.Integer,
     'user_id': fields.Integer,
     'date_posted': fields.DateTime(dt_format='iso8601'),
-    'events': fields.List(fields.Nested(event_fields)),  # New field for events
+    'events': fields.List(fields.Nested(event_fields)),
 }
 
-def extract_city(address):
-    try:
-        # Split the address by commas
-        parts = address.split(',')
-        # Assuming the city is the second part
-        city = parts[1].strip()
-        return city
-    except IndexError:
-        return None
-
-
-# API Resources
 class RestaurantRatings(Resource):
+    """
+    Resource for handling multiple restaurant ratings.
+    - POST: Add a new restaurant rating and fetch nearby events.
+    - GET: Retrieve a list of restaurant ratings with optional filters.
+    """
     @marshal_with(rating_fields)
     def post(self):
         '''
         Add a new restaurant rating and fetch nearby events.
+
+        Returns:
+            dict: A dictionary containing the restaurant rating and nearby events.
         '''
         args = rating_args.parse_args()
         address = args['restaurant_address']
         
         # Extract city from address
         city = extract_city(address)
-        
         if not city:
             abort(400, message="Could not extract city from address.")
         
@@ -134,7 +75,7 @@ class RestaurantRatings(Resource):
         
         # Fetch events from Ticketmaster API
         try:
-            events = search_events(city=city, max_events=3, classificationName='Music')  # Adjust classification as needed
+            events = search_events(city=city, max_events=3, classificationName='Music')
             logging.debug(f"Fetched Events: {events}")
         except Exception as e:
             logging.error(f"Error fetching events: {e}")
@@ -143,9 +84,8 @@ class RestaurantRatings(Resource):
         # Assign events to the dynamic property
         new_rating.events = events
         
-        # Serialize the response using Marshmallow
         return new_rating, 201
-    
+
     @marshal_with(rating_fields)
     def get(self):
         """
@@ -154,6 +94,9 @@ class RestaurantRatings(Resource):
             - restaurant_type
             - min_rating
             - max_rating
+
+        Returns:
+            list: A list of restaurant ratings with optional filters applied. 
         """
         parser = reqparse.RequestParser()
         parser.add_argument('restaurant_type', type=str, location='args')
@@ -163,6 +106,7 @@ class RestaurantRatings(Resource):
 
         query = RestaurantRatingModel.query
 
+        # Types of filters that can be applied
         if args['restaurant_type']:
             query = query.filter(RestaurantRatingModel.restaurant_type.ilike(f"%{args['restaurant_type']}%"))
         if args['min_rating']:
@@ -177,6 +121,7 @@ class RestaurantRatings(Resource):
             try:
                 events = search_events(city=rating.city, max_events=3, classificationName='Music')
                 rating.events = events
+                logging.debug(f"Fetched Events for rating ID {rating.id}: {events}")
             except Exception as e:
                 logging.error(f"Error fetching events for rating ID {rating.id}: {e}")
                 rating.events = []
@@ -184,10 +129,22 @@ class RestaurantRatings(Resource):
         return ratings, 200
 
 class RestaurantRating(Resource):
+    """
+    Resource for handling a single restaurant rating.
+    - GET: Retrieve a specific restaurant rating by ID along with related events.
+    - PATCH: Update fields of a specific restaurant rating.
+    - DELETE: Delete a specific restaurant rating by ID.
+    """
     @marshal_with(rating_fields)
     def get(self, id):
         '''
         Retrieve restaurant rating by ID along with related events.
+
+        Args:
+            id (int): The ID of the restaurant rating.
+
+        Returns:
+            dict: A dictionary containing the restaurant rating and related events.
         '''
         rating = RestaurantRatingModel.query.filter_by(id=id).first()
         if not rating:
@@ -210,13 +167,19 @@ class RestaurantRating(Resource):
     def patch(self, id):
         '''
         Update fields of a restaurant rating.
+
+        Args:
+            id (int): The ID of the restaurant rating.
+
+        Returns:
+            dict: A dictionary containing the updated restaurant rating.
         '''
         args = rating_args.parse_args()
         rating = RestaurantRatingModel.query.filter_by(id=id).first()
         if not rating:
             abort(404, message='Restaurant rating not found.')
 
-        # update fields
+        # Update fields
         rating.restaurant_name = args.get('restaurant_name', rating.restaurant_name)
         rating.restaurant_type = args.get('restaurant_type', rating.restaurant_type)
         rating.restaurant_address = args.get('restaurant_address', rating.restaurant_address)
@@ -224,7 +187,22 @@ class RestaurantRating(Resource):
         rating.meal = args.get('meal', rating.meal)
         # rating.photo = args.get('photo', rating.photo)  # Uncomment if handling photos
         rating.calories = args.get('calories', rating.calories)
-        rating.user_id = args.get('user_id', rating.user_id)
+
+        # Re-extract city if address has changed
+        if 'restaurant_address' in args and args['restaurant_address'] != rating.restaurant_address:
+            new_city = extract_city(rating.restaurant_address)
+            if new_city:
+                rating.city = new_city
+                try:
+                    events = search_events(city=new_city, max_events=3, classificationName='Music')
+                    logging.debug(f"Fetched Events on Update for rating ID {id}: {events}")
+                except Exception as e:
+                    logging.error(f"Error fetching events on update for rating ID {id}: {e}")
+                    events = []
+                # Assign events to the dynamic property
+                rating.events = events
+            else:
+                abort(400, message="Could not extract city from new address.")
 
         db.session.commit()
         return rating, 200
@@ -233,6 +211,12 @@ class RestaurantRating(Resource):
     def delete(self, id):
         '''
         Delete a restaurant rating by ID
+
+        Args:
+            id (int): The ID of the restaurant rating.
+
+        Returns:
+            dict: A dictionary containing a message indicating the deletion status.
         '''
         rating = RestaurantRatingModel.query.filter_by(id=id).first()
         if not rating:
@@ -241,33 +225,34 @@ class RestaurantRating(Resource):
         db.session.commit()
         return {'message': 'Deleted'}, 200
 
-class AggregatedData(Resource):
+class Average_Ratings(Resource):
+    """
+    Resource for handling aggregated restaurant rating data.
+    - GET: Retrieve aggregated data such as average ratings per restaurant.
+    """
     def get(self):
         """
-        Retrieve aggregated data: average ratings.
+        Retrieve aggregated data: average ratings per restaurant.
+        
+        Returns:
+            list: A list of dictionaries containing restaurant names and their average ratings.
         """
-        from sqlalchemy import func
+        try:
+            # Query to calculate average rating per restaurant
+            aggregation = db.session.query(
+                RestaurantRatingModel.restaurant_name,
+                func.avg(RestaurantRatingModel.rating).label('average_rating')
+            ).group_by(RestaurantRatingModel.restaurant_name).all()
 
-        aggregation = db.session.query(
-            RestaurantRatingModel.restaurant_name,
-            func.avg(RestaurantRatingModel.rating).label('average_rating'),
-        ).group_by(RestaurantRatingModel.restaurant_name).all()
+            # Format the results
+            result = []
+            for agg in aggregation:
+                result.append({
+                    'restaurant_name': agg.restaurant_name,
+                    'average_rating': round(agg.average_rating, 2) if agg.average_rating else None,
+                })
 
-        result = []
-        for agg in aggregation:
-            result.append({
-                'restaurant_name': agg.restaurant_name,
-                'average_rating': round(agg.average_rating, 2) if agg.average_rating else None,
-            })
-        return result, 200
-
-
-
-# Resources to API
-api.add_resource(RestaurantRatings, '/api/ratings/')
-api.add_resource(RestaurantRating, '/api/ratings/<int:id>')
-api.add_resource(AggregatedData, '/api/ratings/aggregated/')
-
-
-if __name__ == '__main__':
-    app.run(debug=True) 
+            return result, 200
+        except Exception as e:
+            logging.error(f"Error retrieving aggregated data: {e}")
+            abort(500, message="Internal server error while retrieving aggregated data.")
