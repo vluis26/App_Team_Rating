@@ -1,6 +1,6 @@
 from flask_restful import Resource, reqparse, marshal_with, abort, fields
 from sqlalchemy import func
-from app.models import RestaurantRatingModel
+from app.models import RestaurantRatingModel, UserModel
 from app.utils.helpers import extract_city, fetch_and_assign_events
 from app.extensions import db
 import logging
@@ -34,6 +34,13 @@ rating_fields = {
     'date_posted': fields.DateTime(dt_format='iso8601'),
     'events': fields.List(fields.Nested(event_fields)),
 }
+
+# Output Fields for Average Rating
+average_rating_fields = {
+    'restaurant_name': fields.String,
+    'average_rating': fields.Float
+}
+
 
 class RestaurantRatings(Resource):
     """
@@ -230,3 +237,83 @@ class Average_Ratings(Resource):
         except Exception as e:
             logging.error(f"Error retrieving aggregated data: {e}")
             abort(500, message="Internal server error while retrieving aggregated data.")
+
+class Average_Rating(Resource):
+    """
+    Resource for retrieving the average rating of a specific restaurant.
+    - GET: Retrieve the average rating for the given restaurant_name.
+    """
+    @marshal_with(average_rating_fields)
+    def get(self, restaurant_name):
+        """
+        Retrieve the average rating for a specific restaurant.
+
+        Args:
+            restaurant_name (str): The name of the restaurant.
+
+        Returns:
+            dict: A dictionary containing the restaurant name and its average rating.
+        """
+        try:
+            # Query to calculate average rating for the specified restaurant_name
+            aggregation = db.session.query(
+                RestaurantRatingModel.restaurant_name,
+                func.avg(RestaurantRatingModel.rating).label('average_rating')
+            ).filter(
+                RestaurantRatingModel.restaurant_name.ilike(f"%{restaurant_name}%")
+            ).group_by(
+                RestaurantRatingModel.restaurant_name
+            ).first()
+
+            if not aggregation:
+                abort(404, message=f"No ratings found for restaurant '{restaurant_name}'.")
+
+            # Round the average rating to two decimal places
+            average_rating = round(aggregation.average_rating, 2) if aggregation.average_rating else None
+
+            return {
+                'restaurant_name': aggregation.restaurant_name,
+                'average_rating': average_rating
+            }, 200
+
+        except Exception as e:
+            logging.error(f"Error retrieving average rating for '{restaurant_name}': {e}")
+            abort(500, message="Internal server error while retrieving average rating.")
+
+class UserRatings(Resource):
+    """
+    Resource for retrieving all restaurant ratings submitted by a specific user.
+    - GET: Retrieve all ratings posted by the given user_id.
+    """
+    @marshal_with(rating_fields)
+    def get(self, user_id):
+        """
+        Retrieve all restaurant ratings submitted by a specific user.
+        
+        Args:
+            user_id (int): The ID of the user.
+        
+        Returns:
+            list: A list of restaurant ratings submitted by the user.
+        """
+        try:
+            # Check if the user exists
+            user = UserModel.query.filter_by(id=user_id).first()
+            if not user:
+                abort(404, message=f"User with id '{user_id}' not found.")
+            
+            # Retrieve all ratings submitted by the user
+            user_ratings = RestaurantRatingModel.query.filter_by(user_id=user_id).all()
+            
+            if not user_ratings:
+                abort(404, message=f"No ratings found for user with id '{user_id}'.")
+            
+            # Assign events to each rating using the helper function
+            for rating in user_ratings:
+                fetch_and_assign_events(rating)
+            
+            return user_ratings, 200
+        
+        except Exception as e:
+            logging.error(f"Error retrieving ratings for user_id '{user_id}': {e}")
+            abort(500, message="Internal server error while retrieving user ratings.")

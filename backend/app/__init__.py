@@ -3,7 +3,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import logging
 from app.extensions import db, api
-from app.resources.restaurant_ratings import RestaurantRatings, RestaurantRating, Average_Ratings
+from app.resources.restaurant_ratings import RestaurantRatings, RestaurantRating, Average_Ratings, Average_Rating, UserRatings
 
 # Initialize logging early to capture all logs
 logging.basicConfig(
@@ -13,11 +13,12 @@ logging.basicConfig(
 
 # Register resources
 api.add_resource(RestaurantRatings, '/api/ratings/')
-logging.debug("Registered RestaurantRatings at /api/ratings/")
 api.add_resource(RestaurantRating, '/api/ratings/<int:id>')
-logging.debug("Registered RestaurantRating at /api/ratings/<int:id>")
 api.add_resource(Average_Ratings, '/api/ratings/average_ratings/')
-logging.debug("Registered Average_Ratings at /api/ratings/average_ratings/")
+api.add_resource(Average_Rating, '/api/ratings/average_ratings/<string:restaurant_name>')
+api.add_resource(UserRatings, '/api/users/<int:user_id>/ratings')
+
+
 
 def create_app():
     app = Flask(__name__)
