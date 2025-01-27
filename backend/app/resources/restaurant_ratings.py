@@ -5,15 +5,26 @@ from app.utils.helpers import extract_city, fetch_and_assign_events
 from app.extensions import db
 import logging
 
-# Request Parsers
-rating_args = reqparse.RequestParser()
-rating_args.add_argument('restaurant_name', type=str, required=True, help="Restaurant name cannot be blank")
-rating_args.add_argument('restaurant_type', type=str, required=True, help="Restaurant type cannot be blank")
-rating_args.add_argument('restaurant_address', type=str, required=True, help="Restaurant address cannot be blank")
-rating_args.add_argument('rating', type=int, required=True, choices=[1,2,3,4,5], help="Rating (1-5) is required")
-rating_args.add_argument('meal', type=str, required=True, help="Meal cannot be empty")
-rating_args.add_argument('calories', type=int, required=True, help="Calories cannot be empty")
-rating_args.add_argument('user_id', type=int, required=False)
+# POST Parser
+rating_post_args = reqparse.RequestParser()
+rating_post_args.add_argument('restaurant_name', type=str, required=True, help="Restaurant name cannot be blank")
+rating_post_args.add_argument('restaurant_type', type=str, required=True, help="Restaurant type cannot be blank")
+rating_post_args.add_argument('restaurant_address', type=str, required=True, help="Restaurant address cannot be blank")
+rating_post_args.add_argument('rating', type=int, required=True, choices=[1,2,3,4,5], help="Rating (1-5) is required")
+rating_post_args.add_argument('meal', type=str, required=True, help="Meal cannot be empty")
+rating_post_args.add_argument('calories', type=int, required=True, help="Calories cannot be empty")
+rating_post_args.add_argument('user_id', type=int, required=False, help="ID of the user submitting the rating")
+rating_post_args.add_argument('name', type=str, required=False, help="Name of the user (required if user_id is not provided)")
+rating_post_args.add_argument('email', type=str, required=False, help="Email of the user (required if user_id is not provided)")
+
+# PATCH Parser
+rating_patch_args = reqparse.RequestParser()
+rating_patch_args.add_argument('restaurant_name', type=str, required=False)
+rating_patch_args.add_argument('restaurant_type', type=str, required=False)
+rating_patch_args.add_argument('restaurant_address', type=str, required=False)
+rating_patch_args.add_argument('rating', type=int, required=False, choices=[1,2,3,4,5], help="Rating (1-5) is required")
+rating_patch_args.add_argument('meal', type=str, required=False)
+rating_patch_args.add_argument('calories', type=int, required=False)
 
 # Output Fields
 event_fields = {
@@ -55,7 +66,7 @@ class RestaurantRatings(Resource):
         Returns:
             dict: A dictionary containing the restaurant rating and nearby events.
         '''
-        args = rating_args.parse_args()
+        args = rating_post_args.parse_args()
         address = args['restaurant_address']
         
         # Extract city from address
@@ -158,29 +169,42 @@ class RestaurantRating(Resource):
         Returns:
             dict: A dictionary containing the updated restaurant rating.
         '''
-        args = rating_args.parse_args()
+        args = rating_patch_args.parse_args()  # Use the PATCH parser
         rating = RestaurantRatingModel.query.filter_by(id=id).first()
         if not rating:
             abort(404, message='Restaurant rating not found.')
 
-        # Update fields
-        rating.restaurant_name = args.get('restaurant_name', rating.restaurant_name)
-        rating.restaurant_type = args.get('restaurant_type', rating.restaurant_type)
-        rating.restaurant_address = args.get('restaurant_address', rating.restaurant_address)
-        rating.rating = args.get('rating', rating.rating)
-        rating.meal = args.get('meal', rating.meal)
-        rating.calories = args.get('calories', rating.calories)
-
-        # Re-extract city if address has changed
-        if 'restaurant_address' in args and args['restaurant_address'] != rating.restaurant_address:
+        # Update fields only if they are provided
+        if args['restaurant_name']:
+            rating.restaurant_name = args['restaurant_name']
+        if args['restaurant_type']:
+            rating.restaurant_type = args['restaurant_type']
+        if args['restaurant_address']:
+            rating.restaurant_address = args['restaurant_address']
+            # Re-extract city if address has changed
             new_city = extract_city(rating.restaurant_address)
             if new_city:
                 rating.city = new_city
-                fetch_and_assign_events(rating)
             else:
                 abort(400, message="Could not extract city from new address.")
+        if args['rating']:
+            rating.rating = args['rating']
+        if args['meal']:
+            rating.meal = args['meal']
+        if args['calories']:
+            rating.calories = args['calories']
+        if args['user_id']:
+            # Associate with an existing user
+            user = UserModel.query.get(args['user_id'])
+            if not user:
+                abort(400, message=f"User with id '{args['user_id']}' does not exist.")
+            rating.user_id = args['user_id']
 
         db.session.commit()
+
+        # Fetch and assign events using the helper function
+        fetch_and_assign_events(rating)
+
         return rating, 200
     
     @marshal_with(rating_fields)
@@ -290,24 +314,19 @@ class UserRatings(Resource):
         Returns:
             list: A list of restaurant ratings submitted by the user.
         """
-        try:
-            # Check if the user exists
-            user = UserModel.query.filter_by(id=user_id).first()
-            if not user:
-                abort(404, message=f"User with id '{user_id}' not found.")
-            
-            # Retrieve all ratings submitted by the user
-            user_ratings = RestaurantRatingModel.query.filter_by(user_id=user_id).all()
-            
-            if not user_ratings:
-                abort(404, message=f"No ratings found for user with id '{user_id}'.")
-            
-            # Assign events to each rating using the helper function
-            for rating in user_ratings:
-                fetch_and_assign_events(rating)
-            
-            return user_ratings, 200
+        # Check if the user exists
+        user = UserModel.query.filter_by(id=user_id).first()
+        if not user:
+            abort(404, message=f"User with id '{user_id}' not found.")
         
-        except Exception as e:
-            logging.error(f"Error retrieving ratings for user_id '{user_id}': {e}")
-            abort(500, message="Internal server error while retrieving user ratings.")
+        # Retrieve all ratings submitted by the user
+        user_ratings = RestaurantRatingModel.query.filter_by(user_id=user_id).all()
+        
+        if not user_ratings:
+            abort(404, message=f"No ratings found for user with id '{user_id}'.")
+        
+        # Assign events to each rating using the helper function
+        for rating in user_ratings:
+            fetch_and_assign_events(rating)
+        
+        return user_ratings, 200

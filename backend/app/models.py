@@ -27,7 +27,7 @@ class RestaurantRatingModel(db.Model):
     city = db.Column(db.String(100), nullable=False)
     
     # Associate with the user
-    user_id = db.Column(db.Integer, db.ForeignKey('user_model.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user_model.id'), nullable=False)
     
     # Dynamic attribute for events
     _events = None

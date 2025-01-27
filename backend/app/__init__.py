@@ -16,7 +16,7 @@ api.add_resource(RestaurantRatings, '/api/ratings/')
 api.add_resource(RestaurantRating, '/api/ratings/<int:id>')
 api.add_resource(Average_Ratings, '/api/ratings/average_ratings/')
 api.add_resource(Average_Rating, '/api/ratings/average_ratings/<string:restaurant_name>')
-api.add_resource(UserRatings, '/api/users/<int:user_id>/ratings')
+api.add_resource(UserRatings, '/api/users/<int:user_id>/ratings/')
 
 
 
