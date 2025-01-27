@@ -1,11 +1,37 @@
 # App_Team_Rating
 The Restaurant Rating API is RESTful service designed to allow users to submit, retrieve, update, and delete restaurant ratings. It provides aggregated data such as average ratings per restaurant and allows users to view all ratings (filter: restaurant_name, restaurant_type, min/max rating, and by specific user). The API integrates a third-party API, TicketMaster API, to fetch events bases on the restaurant's location.
 
-### 1. **Choice of Tools**
+# Big-Picture Design Decisions
+## Modular and Scalable Design
+- The API is designed with a modular structure, easy to maintain and scale
+- ![Screenshot 2025-01-27 at 12 58 06 AM](https://github.com/user-attachments/assets/1cf1eea6-1423-4a0b-ae03-f0b939301ec5)
 
-- **Flask:** A lightweight WSGI web application framework used for building the API.
-- **Flask-RESTful:** An extension for Flask that adds support for quickly building REST APIs.
-- **SQLAlchemy:** A powerful ORM (Object-Relational Mapping) library for managing database interactions.
+## RESTful API Principles
+- HTTP methods map directly to CRUD operations
+
+## Data Validation and Error Handling
+- Input validation is implemented using reqparse to ensure data integrity.
+
+## Integration with a Third-Party API
+- The integration with the TicketMaster API adds value by fetching relevant events based on restaurant locations.
+
+## Filtering and Aggregation
+- Filtering options (e.g., by restaurant name, type, or rating range) are included to allow clients to retrieve specific subsets of data.
+
+## Flexibility in Data Model
+- The RestaurantRatingModel includes fields like restaurant_type, meal, calories, and city to ensure flexibility for various types of data.
+- Dynamic fields like events are designed to hold third-party API data without altering the database schema.
+
+# Database
+
+- SQLite: A lightweight, file-based database used for development and testing purposes. Easily replaceable with more robust databases like PostgreSQL for production environments.
+
+
+# Choice of Tools
+
+- Flask: A lightweight WSGI web application framework used for building the API.
+- Flask-RESTful: An extension for Flask that adds support for quickly building REST APIs.
+- SQLAlchemy: A powerful ORM (Object-Relational Mapping) library for managing database interactions.
 
 
 # Setup
