@@ -55,6 +55,22 @@ pip install -r requirements.txt
 mkdir -p instance
 python create_db.py
 ```
+### Create a User
+```bash
+start Flask Shell
+flask shell
+from app.extensions import db
+
+# Create a new user with id=1
+new_user = UserModel(id=1, name="John Doe", email="john.doe@example.com")
+db.session.add(new_user)
+db.session.commit()
+
+# Verify creation
+user = UserModel.query.get(1)
+print(user)
+exit()
+```
 ### Running the API
 ```bash
 source venv/bin/activate
