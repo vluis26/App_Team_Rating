@@ -35,7 +35,6 @@ rating_fields = {
     'events': fields.List(fields.Nested(event_fields)),
 }
 
-# Output Fields for Average Rating
 average_rating_fields = {
     'restaurant_name': fields.String,
     'average_rating': fields.Float
@@ -117,7 +116,6 @@ class RestaurantRatings(Resource):
 
         ratings = query.all()
 
-        # Assign events to each rating using the helper function
         for rating in ratings:
             fetch_and_assign_events(rating)
         
@@ -145,7 +143,6 @@ class RestaurantRating(Resource):
         if not rating:
             abort(404, message='Restaurant rating not found.')
         
-        # Fetch and assign events using the helper function
         fetch_and_assign_events(rating)
         
         return rating, 200
@@ -172,7 +169,6 @@ class RestaurantRating(Resource):
         rating.restaurant_address = args.get('restaurant_address', rating.restaurant_address)
         rating.rating = args.get('rating', rating.rating)
         rating.meal = args.get('meal', rating.meal)
-        # rating.photo = args.get('photo', rating.photo)  # Uncomment if handling photos
         rating.calories = args.get('calories', rating.calories)
 
         # Re-extract city if address has changed
@@ -180,7 +176,6 @@ class RestaurantRating(Resource):
             new_city = extract_city(rating.restaurant_address)
             if new_city:
                 rating.city = new_city
-                # Fetch and assign events using the helper function
                 fetch_and_assign_events(rating)
             else:
                 abort(400, message="Could not extract city from new address.")
@@ -225,7 +220,6 @@ class Average_Ratings(Resource):
                 func.avg(RestaurantRatingModel.rating).label('average_rating')
             ).group_by(RestaurantRatingModel.restaurant_name).all()
 
-            # Format the results
             result = []
             for agg in aggregation:
                 result.append({

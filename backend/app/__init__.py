@@ -24,7 +24,6 @@ def create_app():
     app = Flask(__name__)
     CORS(app)
 
-    # Load environment variables
     load_dotenv()
 
     # Configure database

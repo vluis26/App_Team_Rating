@@ -2,10 +2,8 @@ import requests
 import os
 import logging
 
-# Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Load the API key from environment variables
 TICKETMASTER_API_KEY = os.getenv('TICKETMASTER_API_KEY')
 BASE_URL = 'https://app.ticketmaster.com/discovery/v2/'
 
@@ -73,7 +71,6 @@ def get_event_details(event_id):
         response = requests.get(endpoint, params=params)
         response.raise_for_status()
         event_details = response.json()
-        # logging.debug(f"Fetched details for event ID: {event_id}")
         return event_details
     except requests.exceptions.HTTPError as http_err:
         logging.error(f"HTTP error occurred: {http_err} - Response: {response.text}")

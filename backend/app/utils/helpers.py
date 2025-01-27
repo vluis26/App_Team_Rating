@@ -14,7 +14,6 @@ def extract_city(address):
         str or None: The extracted city or None if extraction fails.
     """
     try:
-        # Split the address by commas
         parts = address.split(',')
         # Assuming the city is the second part
         if len(parts) < 2:
