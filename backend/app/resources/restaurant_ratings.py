@@ -193,12 +193,6 @@ class RestaurantRating(Resource):
             rating.meal = args['meal']
         if args['calories']:
             rating.calories = args['calories']
-        if args['user_id']:
-            # Associate with an existing user
-            user = UserModel.query.get(args['user_id'])
-            if not user:
-                abort(400, message=f"User with id '{args['user_id']}' does not exist.")
-            rating.user_id = args['user_id']
 
         db.session.commit()
 
