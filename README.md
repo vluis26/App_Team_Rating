@@ -103,10 +103,10 @@ curl -X DELETE http://localhost:5000/api/ratings/1
 ```bash
 curl http://localhost:5000/api/ratings/average_ratings/
 ```
-## 7. /api/ratings/average_rating/<string:restaurant_name>, method: GET
+## 7. /api/ratings/average_ratings/<string:restaurant_name>, method: GET
 ### Example Request: Retrieves the average rating for a specified restaurant:
 ```bash
-curl http://localhost:5000/api/ratings/average_rating/Chinatown%20Delight
+curl http://localhost:5000/api/ratings/average_ratings/Chinatown%20Delight
 ```
 ## 8. /api/users/<int:user_id>/ratings, method: GET
 ### Example Request: Retrieves all restaurant ratings submitted by a specific use:
